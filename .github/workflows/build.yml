@@ -1,4 +1,4 @@
-name: Android CI (release)
+name: Android CI (Release)
 
 on:
   push:
@@ -6,44 +6,69 @@ on:
 
 jobs:
   build:
+    name: Build Android Release
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
+      # -----------------------------
+      # Checkout
+      # -----------------------------
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Setup Ruby v3.2
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 3.2.2
-          bundler-cache: true
-
-      - name: Install Ruby Gems (Bundler)
-        run: |
-          bundle install --jobs 4 --retry 3
-        working-directory: fastlane/
-
+      # -----------------------------
+      # Setup Java (AGP 8 нужен JDK 17)
+      # -----------------------------
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
 
+      # -----------------------------
+      # Setup Ruby
+      # -----------------------------
+      - name: Setup Ruby 3.2
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2.2"
+          bundler-cache: true
+          working-directory: fastlane
+
+      # -----------------------------
+      # Install Bundler dependencies
+      # -----------------------------
+      - name: Install Ruby Gems
+        run: bundle install
+        working-directory: fastlane
+
+      # -----------------------------
+      # Set Build Number
+      # -----------------------------
       - name: Set Build Number
-        env:
-          APPCENTER_NUMBER: 147
         run: |
-          echo "BUILD_NUMBER_NEW=$(($APPCENTER_NUMBER+$GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$((${GITHUB_RUN_NUMBER} + 147))" >> $GITHUB_ENV
 
+      # -----------------------------
+      # Prepare Google Play service account key
+      # -----------------------------
       - name: Create service account key file
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}' > service-account.json  
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" > fastlane/service-account.json
 
+      # -----------------------------
+      # Build with Fastlane
+      # -----------------------------
       - name: Fastlane Build
         uses: maierj/fastlane-action@v3.0.0
         with:
-          lane: 'app_build_release'
-          options: '{ "app_name": "Unstoppable-Release" }'
-          subdirectory: 'fastlane'
+          lane: "app_build_release"
+          subdirectory: "fastlane"
         env:
-          BUILD_NUMBER: ${{env.BUILD_NUMBER_NEW}}
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
+          SUPPLY_JSON_KEY: fastlane/service-account.json
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
